@@ -6,6 +6,7 @@
 #include <thread>
 #include <vector>
 #include <chrono>
+#include <string>
 using namespace std;
 
 string dataPath = "./data/";
@@ -32,6 +33,8 @@ namespace multithread {
 		int countLineByLine();
 		void start();
 		int countSubstring(string &line);
+		vector<int> GetPosition(ifstream &obj);
+		bool ProduceReaderOut(string &filename,string &value, bool check);
 	public:
 		mapper(string d, string k, int i,string readername) {
 			id = i;
@@ -115,14 +118,14 @@ int main(int argc,char** argv) {
 	cout << "Time elapse: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << "ms" << endl;
 	return 0;
 }
-int& ReadIntoQueue(ifstream &obj, deque<string> queue) {
+int& ReadIntoQueue(ifstream &obj, deque<string> queue) /*purpose of deque unknown*/{  
 	string tmp;
 	while (getline(obj, tmp)) {
 		multithread::file_queue.push_back(tmp); //push file name into the queue
 	}
-	multithread::file_queue.size();
+	return multithread::file_queue.size();
 }
-int& ReadIntoQueue2(ifstream &obj, deque<string> queue) {
+int& ReadIntoQueue2(ifstream &obj, deque<string> queue) /*purpose of deque unknown*/ {
 	string tmp;
 	while (getline(obj, tmp)) {
 		multithread::file_queue2.push_back(tmp); //push file name into the queue
@@ -210,6 +213,29 @@ i+=keyword.size()-1;
 return sum;
 }
 */
+bool multithread::mapper::ProduceReaderOut(string& filename,string &value, bool check)
+{
+	ofstream file;
+	file.open(filename+"out.txt");
+	if (check)
+	{
+		file << value + "Cache";
+	}
+	else {
+		file << value + "Disk";
+	}
+	file.close();
+}
+
+vector<int> multithread::mapper::GetPosition(ifstream &obj)
+{
+	string tmp;
+	vector<int> position;
+	while (getline(obj, tmp)) {
+	position.push_back(stoi(tmp)); //push file name into the queue
+	}
+	return position;
+}
 
 int multithread::mapper::countLineByLine() {
 	int count = 0;
@@ -228,9 +254,47 @@ int multithread::mapper::countLineByLine() {
 void multithread::mapper::start() {
 	//multithread::currentMapperWorking++;
 	while (true) {
-		multithread::fileQueueMTX.lock();
+		multithread::fileQueueMTX.lock(); //make this lock shared reader 
 		if (multithread::file_queue.size() != 0) { //check if the queue have filename remaining
 			filename = multithread::file_queue.front();
+		//OK till here as we get the filename from the required queue now we want to read the file again
+			ifstream FILE;
+			//Store the postion in a int/vector for a particular Reader thread
+			//Pass the int/vector to cache to check whether already available
+			OpenFile(FILE, dataPath, filename, true)
+			vector<int> newposition = GetPosition(FILE);
+			//lru cache
+			//Open item file and read from it
+			for (int i = 0; i < newposition.size(); i++)
+			{
+				if (lru.size() == max_size)   //check if cache max size is reached
+				{
+					value = lru.get(newposition(i));
+					ProduceReaderOut(filename,value, true);
+				}
+				else
+				{
+					ifstream FILE;
+					string sLine;
+					OpenFile(FILE, dataPath, /*item file*/, true)
+						int line_no = 0;
+					while (line_no != newposition.at(i) && getline(FILE, sLine)) {
+						++line_no;
+					}
+					 if (line_no == newposition.at(i)) {
+						// sLine contains the x line in the file.
+						sLine = getline(FILE, sLine);
+					 }
+					  else {
+						// The file contains fewer than x lines.
+						
+					  }
+					  lru.put(newposition.at(i), sLine);
+					  ProduceReaderOut(filename,sLine, false);
+				}
+			}
+			//check condition from cache with flag then read from item file it not 
+			//and write to Reader*.out file
 			multithread::consoleOutMTX.lock();
 			cout << "Mapper #" << id + 1 << " reading " << filename << endl;
 			multithread::consoleOutMTX.unlock();
